@@ -1,0 +1,156 @@
+---
+title: "final_project"
+author: "Nan Tang"
+date: "November 30, 2018"
+output: html_document
+---
+
+```{r}
+# Set up environment.
+library(ggplot2)
+library(tidyverse)
+
+# Load google-play-store data.
+gstore.data <- read.csv("data/googleplaystore.csv")
+```
+
+## Research question
+
+The discussion about Free and Paid is always inevitable when we talk about mobile apps. This catagory almost divided mobile app industry into totally different environments. From design to market, multiple distinguish strategies were developed for free and paid apps. Free apps is defined as download for free, most free apps make money based on in-app store, or in-app mendatory advertisement. Thus in common sense, free app is denounced for its bad user experience, but paid app is converse. In my research, I would like to study whether Free app is less satisfied by user than Paid app, based on data collected on google play store. "Rating" is one of the most direct and fundamental factor that reflects user's satisfaction to the work, meanwhile, number of "reviews"" has the potential to reveal user's satisfaction if we can prove positive correlation between "review" and "rating". "Install", in some scale, is not appropriate for this research, since people who download the app may not have a sense whether they will have a good experience using the app. However, the high ratio of review / install may implies good user's experience. In summary, this research will based on "Review", "Rating", and "Install" of google play store apps with type of "Free" and "Paid".
+
+## Data collection
+
+Data is downloaded from kaggle.com, a posted dataset of google play store apps.
+(https://www.kaggle.com/lava18/google-play-store-apps)
+
+```{r}
+# Filter out abnormal rating values (values off the range 0-5), and transfer app size data and number of reviews into numeric value.
+gstore.data <- gstore.data %>%
+  filter(Rating >= 0 & Rating <= 5) %>%
+  mutate(Size.num = as.numeric(str_extract(Size,"[[:digit:]]+\\.*[[:digit:]]*"))) %>%
+  mutate(Reviews.num = as.numeric(str_extract(Reviews,"\\d+")))
+
+# Summary number of reviews, rating, and installs for free apps.
+gstore.data %>% 
+  filter(Type == "Free") %>%
+  select(Reviews.num, Rating, Installs) %>%
+  summary()
+
+# Summary number of reviews, rating, and installs for paid apps.
+gstore.data %>%
+  filter(Type == "Paid") %>%
+  select(Reviews.num, Rating, Installs) %>%
+  summary()
+
+```
+
+## Data Preparation 
+
+```{r}
+# Remove NA and missing values from data set
+gstore.data <- gstore.data %>% 
+  # Remove NA values based on Type.
+  filter(Type != "NaN" & Type != "0") %>% 
+  # Remove missing values based on Size
+  filter(Size != "Varies with device") %>% 
+  # Clean wrong values
+  filter(Rating >= 0 & Rating <= 5)
+
+# Recoding variable Price
+gstore.data <- gstore.data %>%
+  mutate_at(vars(Price), .funs = parse_number)
+
+# Create numeric variable Size.num
+gstore.data <- gstore.data %>%
+  filter(Rating >= 0 & Rating <= 5) %>%
+  mutate(Size.num = as.numeric(str_extract(Size, "[[:digit:]]+\\.*[[:digit:]]*")))
+
+# Create character variable Installs.abbre, which turns character of install number into its abbreviation. 
+str_abbre <- function(str) {
+  str <- str_replace(str, "\\,000\\,000\\,000\\+", "B")
+  str <- str_replace(str, "\\,000\\,000\\+", "M")
+  str <- str_replace(str, "\\,000\\+", "K")
+  return(str)
+}
+gstore.data <- gstore.data %>%
+  mutate(Installs.abbre = str_abbre(Installs))
+
+# Create a new variable, the ratio of review and install.
+gstore.data <- gstore.data %>% 
+  mutate(Install.num = parse_number(Installs)) %>%
+  mutate(Review.Install.rate = (Reviews.num / Install.num))
+```
+
+## Visual Analysis
+Plot 1 Scatterplot
+```{R}
+# Show if rating changes with review numbers for free and paid apps
+# Since review number has an extremely large range, apply log10 to review values to make visualization easier.
+scatter.plot <- gstore.data %>%
+  ggplot(aes(y = Rating, x = log10(Reviews.num))) + 
+  geom_point(alpha = 0.7, aes(col = Type)) +
+  geom_smooth(method = "lm") +
+  theme_bw() +
+  scale_x_continuous(label = function(x) {
+    return(format(10^x))
+  }) +  
+  facet_wrap(~Type) +
+  labs(
+    title = "Scatterplot",
+    subtitle = "Rating vs Reviews",
+    x = "Reviews",
+    y = "Rating",
+    caption = "Source: Kaggle"
+  )
+
+scatter.plot
+
+ggsave("scatterplot.png", scatter.plot, width = 8, height = 5)
+```
+  
+Plot 2 Boxplot
+```{R}
+# Using boxplot to show review-install rate of free and paid app
+# Since most review-install rate is below 0.1, and all of them lie in the interval [0, 1], apply log10 to review-install rate to modify visualization.
+box.plot <- gstore.data %>%
+  filter(Review.Install.rate < 1) %>%
+  ggplot(aes( x = Type, y = log10(Review.Install.rate), color = as.factor(Type))) +
+  geom_boxplot(lwd = 0.8, outlier.colour = "darkgray") +
+  scale_y_continuous(label = function(y) {
+    return(format(10^y))
+  }) + 
+  scale_fill_discrete(name = "Type") +
+  theme_classic() +
+  labs(
+    title = "Boxplot",
+    subtitle = "Reviews / Installs, Free vs Paid",
+    x = "Type",
+    y = "Review / Install",
+    caption = "Source: Kaggle"
+  ) 
+
+box.plot
+
+ggsave("boxplot.png", box.plot, width = 8, height = 5)
+ 
+```
+
+
+## Discussion
+
+Data is a sample collected from google play store, with 7729 app's feedback data such as "reviews" "rating" "install". 7095 of them are free apps and 634 are paid, both samples are large enough to represent the population.
+
+Data come from google play store's publish data, and didn't include any designers' or users' personal information, such as name, gender, age, etc. All the variables are public information, of which people may find all of them on google play store, such as "App name", "Rating", "Review", "Installs", "Price", "Last version", etc. No detailed information such as personal information of user who reviewed, rated, or downloaded the app appeared in the dataset, thereby the data set used for this research don't need any anonymity and didn't violate the privacy of any sides, both user and designer. Also, in the research, the graph I plotted didn't reveal information for certain app.
+
+Focus on "rating", Free app has a medium of 4.3 mean of 4.186, while Paid app has medium of 4.4, mean of 4.267. In aspect of mean and medium, Paid app has higher rating, which implies people are more satisfied with paid apps. However, since we haven't conducted hypothesis test, we cannot conclude this result is significant. 
+
+Scatterplot and regression line which I plotted in the first graph, in some scale, reflected positive correlation between rating and review for both free and paid apps, in other words, app with more reviews may have higher rating. Though we need advanced hypothesis test to these two variable to certify the correlation exist, from the plot, we can find an obvious trend that lower rating devreases significantly as review number growing larger. Thereby, in this research, we may apply review number as one of factors that reflect user's satisfaction. 
+
+The new variable "Review.Install.rate" is another factor that is created for reflecting user's experience. It doesn't matter how large the amount of install is, higher review / install rate represents higher user's experience and satisfaction to the app. From the boxplot, it's clear to see the rate of Paid app has medium close to 0.1 while Free app has medium close to 0.01. In this aspect, users are more willing to write review for Paid app than to the Free.
+
+Overall, though most hypothesis need further test to certify, this research shows a trand that people's satisfaction to Paid app is higher than to Free app. I think the limitation of this research exists due to using "rating" as  only factor, though applied "review" and "install" as complementary factors, is too abstract to estimate user's "satisfaction". A multi-parameter model is needed to reflect holistically users' experience when useing the app. 
+
+
+
+
+
